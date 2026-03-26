@@ -54,6 +54,14 @@ function detectKiroLogs(): DetectedLog[] {
 
 export class LogDetector {
   detect(): DetectedLog[] {
-    return [...detectCodexSessions(), ...detectKiroLogs()];
+    const results = [...detectCodexSessions(), ...detectKiroLogs()];
+
+    // Kiro CLI SQLite DB — always add if exists
+    const db = path.join(os.homedir(), 'Library', 'Application Support', 'kiro-cli', 'data.sqlite3');
+    if (fs.existsSync(db)) {
+      results.push({ tool: 'kiro-cli', filePath: db, lastModified: fs.statSync(db).mtime });
+    }
+
+    return results;
   }
 }

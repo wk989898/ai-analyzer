@@ -9,6 +9,7 @@ import { WebServer } from '../web/WebServer';
 import { Scheduler } from '../scheduler/Scheduler';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 export class CLIService {
   register(program: Command): void {
@@ -85,9 +86,10 @@ export class CLIService {
   }
 
   private getAllDates(): string[] {
-    const os = require('os');
-    const base = path.join(os.homedir(), '.codex', 'sessions');
     const dates = new Set<string>();
+
+    // Codex: dates from session file paths
+    const codexBase = path.join(os.homedir(), '.codex', 'sessions');
     const walk = (dir: string) => {
       if (!fs.existsSync(dir)) return;
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -98,7 +100,20 @@ export class CLIService {
         if (m) dates.add(`${m[1]}-${m[2]}-${m[3]}`);
       }
     };
-    walk(base);
+    walk(codexBase);
+
+    // Kiro CLI: dates from SQLite DB
+    const dbPath = path.join(os.homedir(), 'Library', 'Application Support', 'kiro-cli', 'data.sqlite3');
+    if (fs.existsSync(dbPath)) {
+      try {
+        const Database = require('better-sqlite3');
+        const db = new Database(dbPath, { readonly: true });
+        const rows = db.prepare('SELECT created_at FROM conversations_v2').all() as any[];
+        db.close();
+        for (const row of rows) dates.add(new Date(row.created_at).toISOString().slice(0, 10));
+      } catch { /* skip */ }
+    }
+
     return [...dates].sort();
   }
 }
