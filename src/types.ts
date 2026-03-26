@@ -43,13 +43,11 @@ export interface TasteProfile {
   version: number;
   updatedAt: string;
   techPreferences: string[];
-  communicationStyle: string[];
   workDomains: string[];
-  personalityTraits: string[];
+  personality: string[];
   responseGuidance: string[];
   strengths: string[];
   weaknesses: string[];
-  otherInsights: string[];
 }
 
 export interface Config {

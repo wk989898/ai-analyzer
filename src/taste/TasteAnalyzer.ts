@@ -32,16 +32,14 @@ ${allSummaries.map(s => `[${s.date}] topics: ${s.topics.join(',')} keywords: ${s
 Recent user messages (analyze tone, style, habits):
 ${userMessages}
 
-Generate an evolved taste profile. Output ONLY valid JSON with these fields:
+Generate a concise taste profile. Keep each array to max 5 items. Output ONLY valid JSON:
 {
-  "techPreferences": ["technologies, languages, tools the user works with frequently"],
-  "communicationStyle": ["observed communication traits: language preference, verbosity, directness, how they ask questions, etc"],
-  "workDomains": ["primary work domains"],
-  "personalityTraits": ["inferred personality traits and habits from conversation patterns, e.g. 'prefers concise answers', 'pastes raw logs without filtering', 'iterative problem-solver', 'direct and low-ceremony'"],
-  "responseGuidance": ["concrete instructions for AI agents on HOW to respond to this user, e.g. 'respond in Chinese unless user writes in English', 'skip pleasantries and get to the point', 'show commands directly without lengthy explanation', 'use bullet points over paragraphs'],
-  "strengths": ["user's strengths and highlights inferred from conversations, e.g. 'methodical debugger', 'strong intuition about root causes'"],
-  "weaknesses": ["user's weaknesses or blind spots, e.g. 'sometimes jumps to conclusions', 'may overlook documentation'"],
-  "otherInsights": ["other notable patterns or interests"]
+  "techPreferences": ["top technologies, languages, tools (max 5)"],
+  "workDomains": ["primary work domains (max 3)"],
+  "personality": ["key personality traits, communication style, and habits merged into one list (max 5)"],
+  "responseGuidance": ["concrete instructions for AI on HOW to respond to this user (max 5)"],
+  "strengths": ["user's key strengths (max 3)"],
+  "weaknesses": ["user's blind spots or weaknesses (max 3)"]
 }`;
 
     const result = this.callAI(prompt);
@@ -114,13 +112,11 @@ Generate an evolved taste profile. Output ONLY valid JSON with these fields:
         version: versionMatch ? parseInt(versionMatch[1]) : 1,
         updatedAt: '',
         techPreferences: parseSection('Tech Preferences'),
-        communicationStyle: parseSection('Communication Style'),
         workDomains: parseSection('Work Domains'),
-        personalityTraits: parseSection('Personality & Habits'),
+        personality: parseSection('Personality & Habits'),
         responseGuidance: parseSection('How to Respond to This User'),
         strengths: parseSection('Strengths & Highlights'),
         weaknesses: parseSection('Weaknesses & Blind Spots'),
-        otherInsights: parseSection('Other Insights'),
       };
     } catch { return null; }
   }
@@ -151,14 +147,12 @@ Generate an evolved taste profile. Output ONLY valid JSON with these fields:
     return {
       version,
       updatedAt: new Date().toISOString(),
-      techPreferences: merge(newKeywords, prev?.techPreferences ?? [], 15),
-      communicationStyle: prev?.communicationStyle ?? [],
-      workDomains: merge(newDomains, prev?.workDomains ?? [], 5),
-      personalityTraits: prev?.personalityTraits ?? [],
+      techPreferences: merge(newKeywords, prev?.techPreferences ?? [], 5),
+      workDomains: merge(newDomains, prev?.workDomains ?? [], 3),
+      personality: prev?.personality ?? [],
       responseGuidance: prev?.responseGuidance ?? [],
       strengths: prev?.strengths ?? [],
       weaknesses: prev?.weaknesses ?? [],
-      otherInsights: [`Based on ${summaries.length} days of conversation history (keyword analysis)`],
     };
   }
 
@@ -206,14 +200,11 @@ Generate an evolved taste profile. Output ONLY valid JSON with these fields:
 ## Tech Preferences
 ${profile.techPreferences.map(t => `- ${t}`).join('\n')}
 
-## Communication Style
-${profile.communicationStyle.map(s => `- ${s}`).join('\n')}
-
 ## Work Domains
 ${profile.workDomains.map(d => `- ${d}`).join('\n')}
 
 ## Personality & Habits
-${(profile.personalityTraits ?? []).map(p => `- ${p}`).join('\n')}
+${(profile.personality ?? []).map(p => `- ${p}`).join('\n')}
 
 ## How to Respond to This User
 ${(profile.responseGuidance ?? []).map(r => `- ${r}`).join('\n')}
@@ -223,9 +214,6 @@ ${(profile.strengths ?? []).map(s => `- ${s}`).join('\n')}
 
 ## Weaknesses & Blind Spots
 ${(profile.weaknesses ?? []).map(w => `- ${w}`).join('\n')}
-
-## Other Insights
-${profile.otherInsights.map(i => `- ${i}`).join('\n')}
 `;
   }
 }
