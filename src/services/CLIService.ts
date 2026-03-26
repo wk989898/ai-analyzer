@@ -25,7 +25,16 @@ export class CLIService {
       .command('run')
       .description('Run analysis for a specific date (default: today)')
       .option('--date <YYYY-MM-DD>', 'Date to analyze')
-      .action(async (opts) => { await analyzer.run(opts.date); });
+      .option('--all', 'Analyze all available historical dates')
+      .action(async (opts) => {
+        if (opts.all) {
+          const dates = this.getAllDates();
+          console.log(`[CLI] Found ${dates.length} dates to analyze`);
+          for (const date of dates) await analyzer.run(date);
+        } else {
+          await analyzer.run(opts.date);
+        }
+      });
 
     program
       .command('serve')
@@ -73,5 +82,23 @@ export class CLIService {
         config.save({ [key]: value } as any);
         console.log(`Config updated: ${key} = ${value}`);
       });
+  }
+
+  private getAllDates(): string[] {
+    const os = require('os');
+    const base = path.join(os.homedir(), '.codex', 'sessions');
+    const dates = new Set<string>();
+    const walk = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!entry.name.endsWith('.jsonl')) continue;
+        const m = full.match(/(\d{4})[/\\](\d{2})[/\\](\d{2})[/\\]/);
+        if (m) dates.add(`${m[1]}-${m[2]}-${m[3]}`);
+      }
+    };
+    walk(base);
+    return [...dates].sort();
   }
 }
