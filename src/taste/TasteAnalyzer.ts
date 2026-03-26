@@ -23,20 +23,23 @@ export class TasteAnalyzer {
       .slice(-30)
       .join('\n---\n');
 
-    const prompt = `You are analyzing a developer's AI agent conversation history to build a taste profile.
+    const prompt = `You are analyzing a developer's AI agent conversation history to build a detailed taste profile.
+The profile will be injected into AI agents as a steering document so they can respond in a style that matches this user.
 
 ${prevProfile ? `Previous profile (merge and evolve this):\n${JSON.stringify(prevProfile, null, 2)}\n\n` : ''}Recent conversation summaries (${allSummaries.length} days):
 ${allSummaries.map(s => `[${s.date}] topics: ${s.topics.join(',')} keywords: ${s.keywords.join(',')}`).join('\n')}
 
-Recent user messages:
+Recent user messages (analyze tone, style, habits):
 ${userMessages}
 
-Based on the above, generate an evolved taste profile. Output ONLY valid JSON with these fields:
+Generate an evolved taste profile. Output ONLY valid JSON with these fields:
 {
-  "techPreferences": ["list of technologies, languages, tools the user works with"],
-  "communicationStyle": ["how they communicate: language (Chinese/English), verbosity, directness, etc"],
+  "techPreferences": ["technologies, languages, tools the user works with frequently"],
+  "communicationStyle": ["observed communication traits: language preference, verbosity, directness, how they ask questions, etc"],
   "workDomains": ["primary work domains"],
-  "otherInsights": ["other notable patterns, interests, or preferences"]
+  "personalityTraits": ["inferred personality traits and habits from conversation patterns, e.g. 'prefers concise answers', 'pastes raw logs without filtering', 'iterative problem-solver', 'direct and low-ceremony'"],
+  "responseGuidance": ["concrete instructions for AI agents on HOW to respond to this user, e.g. 'respond in Chinese unless user writes in English', 'skip pleasantries and get to the point', 'show commands directly without lengthy explanation', 'use bullet points over paragraphs'],
+  "otherInsights": ["other notable patterns or interests"]
 }`;
 
     const result = this.callAI(prompt);
@@ -111,6 +114,8 @@ Based on the above, generate an evolved taste profile. Output ONLY valid JSON wi
         techPreferences: parseSection('Tech Preferences'),
         communicationStyle: parseSection('Communication Style'),
         workDomains: parseSection('Work Domains'),
+        personalityTraits: parseSection('Personality & Habits'),
+        responseGuidance: parseSection('How to Respond to This User'),
         otherInsights: parseSection('Other Insights'),
       };
     } catch { return null; }
@@ -145,6 +150,8 @@ Based on the above, generate an evolved taste profile. Output ONLY valid JSON wi
       techPreferences: merge(newKeywords, prev?.techPreferences ?? [], 15),
       communicationStyle: prev?.communicationStyle ?? [],
       workDomains: merge(newDomains, prev?.workDomains ?? [], 5),
+      personalityTraits: prev?.personalityTraits ?? [],
+      responseGuidance: prev?.responseGuidance ?? [],
       otherInsights: [`Based on ${summaries.length} days of conversation history (keyword analysis)`],
     };
   }
@@ -198,6 +205,12 @@ ${profile.communicationStyle.map(s => `- ${s}`).join('\n')}
 
 ## Work Domains
 ${profile.workDomains.map(d => `- ${d}`).join('\n')}
+
+## Personality & Habits
+${(profile.personalityTraits ?? []).map(p => `- ${p}`).join('\n')}
+
+## How to Respond to This User
+${(profile.responseGuidance ?? []).map(r => `- ${r}`).join('\n')}
 
 ## Other Insights
 ${profile.otherInsights.map(i => `- ${i}`).join('\n')}

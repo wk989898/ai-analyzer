@@ -45,6 +45,8 @@ export interface TasteProfile {
   techPreferences: string[];
   communicationStyle: string[];
   workDomains: string[];
+  personalityTraits: string[];
+  responseGuidance: string[];
   otherInsights: string[];
 }
 
