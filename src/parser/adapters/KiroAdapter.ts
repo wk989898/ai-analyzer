@@ -56,16 +56,21 @@ export class CodexAdapter implements LogAdapter {
 
         if (event.type === 'response_item') {
           const p = event.payload;
-          // user or assistant message
           if ((p.role === 'user' || p.role === 'assistant') && Array.isArray(p.content)) {
             const text = p.content
               .filter((c: any) => c.type === 'input_text' || c.type === 'output_text')
               .map((c: any) => c.text)
               .join('');
-            if (text) {
-              date = ts.toISOString().slice(0, 10);
-              messages.push({ role: p.role, content: text, timestamp: ts });
-            }
+            // Skip injected system content (AGENTS.md, environment_context, permissions)
+            const isInjected = p.role === 'user' && (
+              text.includes('<INSTRUCTIONS>') ||
+              text.includes('<environment_context>') ||
+              text.includes('<permissions instructions>') ||
+              text.includes('<collaboration_mode>')
+            );
+            if (!text || isInjected) continue;
+            date = ts.toISOString().slice(0, 10);
+            messages.push({ role: p.role, content: text, timestamp: ts });
           }
         }
 
