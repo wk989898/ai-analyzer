@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { execSync } from 'child_process';
 import { Conversation, DailySummary, TasteProfile } from '../types';
 import { ConfigManager } from '../config/ConfigManager';
@@ -95,8 +96,34 @@ Generate a concise taste profile. Keep each array to max 5 items. Output ONLY va
 
   injectToSteering(profile: TasteProfile): void {
     const { steeringDir } = this.config.get();
+    const content = this.toMarkdown(profile);
+
+    // Kiro: inject to .kiro/steering/
     fs.mkdirSync(steeringDir, { recursive: true });
-    fs.writeFileSync(path.join(steeringDir, 'taste.md'), this.toMarkdown(profile));
+    fs.writeFileSync(path.join(steeringDir, 'taste.md'), content);
+
+    // Codex: inject to ~/AGENTS.md (global user instructions)
+    const agentsPath = path.join(os.homedir(), 'AGENTS.md');
+    this.upsertSection(agentsPath, 'User Taste Profile', content);
+  }
+
+  // Insert or replace a tagged section in a file
+  private upsertSection(filePath: string, tag: string, content: string): void {
+    const begin = `<!-- taste:begin -->`;
+    const end = `<!-- taste:end -->`;
+    const block = `${begin}\n${content}\n${end}`;
+
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, block + '\n');
+      return;
+    }
+
+    const existing = fs.readFileSync(filePath, 'utf-8');
+    if (existing.includes(begin)) {
+      fs.writeFileSync(filePath, existing.replace(new RegExp(`${begin}[\\s\\S]*?${end}`), block));
+    } else {
+      fs.writeFileSync(filePath, existing.trimEnd() + '\n\n' + block + '\n');
+    }
   }
 
   private loadLatestProfile(tasteDir: string): TasteProfile | null {
