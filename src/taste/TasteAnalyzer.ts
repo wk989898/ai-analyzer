@@ -24,7 +24,9 @@ export class TasteAnalyzer {
       .slice(-30)
       .join('\n---\n');
 
-    const prompt = `You are maintaining a developer's evolving taste profile used to steer AI agent responses.
+    const prompt = `This is a text analysis task, NOT a coding task. Do NOT write or modify any files.
+
+You are maintaining a developer's evolving taste profile used to steer AI agent responses.
 
 MERGING RULES:
 - Analyze ALL conversation summaries below (full history, not just recent)
@@ -40,7 +42,7 @@ ${allSummaries.map(s => `[${s.date}] keywords: ${s.keywords.slice(0, 8).join(', 
 ${prevProfile ? `Current profile (reflects accumulated history — only evolve, don't reset):\n${JSON.stringify(prevProfile, null, 2)}\n\n` : ''}Today's user messages (new evidence to incorporate if it shows a new pattern):
 ${userMessages}
 
-Output ONLY valid JSON (max items per field in parentheses):
+Output ONLY valid JSON (max items per field in parentheses), nothing else:
 {
   "techPreferences": ["(max 5) technologies/tools that appear frequently across history"],
   "workDomains": ["(max 3) domains that appear frequently across history"],
@@ -66,29 +68,30 @@ Output ONLY valid JSON (max items per field in parentheses):
   }
 
   private callAI(prompt: string): string | null {
-    // Try kiro-cli first
+    // Try codex exec first (non-interactive, reliable JSON output)
+    try {
+      const out = execSync(`echo ${JSON.stringify(prompt)} | codex exec --skip-git-repo-check`, {
+        timeout: 120000,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      // Output format: ...header...\ncodex\n<response>\ntokens used\n<count>\n<response>
+      // Extract JSON block from response
+      const match = out.match(/\{[\s\S]+\}/);
+      if (match) return match[0];
+    } catch { /* try next */ }
+
+    // Fallback: kiro-cli chat
     try {
       const out = execSync(`kiro-cli chat ${JSON.stringify(prompt)}`, {
         timeout: 60000,
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-      // Strip ANSI codes and extract JSON block
       const clean = out.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '').replace(/\r/g, '');
       const match = clean.match(/\{[\s\S]+\}/);
       if (match) return match[0];
-    } catch { /* try next */ }
-
-    // Try codex
-    try {
-      const out = execSync(`codex --quiet ${JSON.stringify(prompt)}`, {
-        timeout: 60000,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      const match = out.match(/\{[\s\S]+\}/);
-      if (match) return match[0];
-    } catch { /* fallback */ }
+    } catch { /* fallback to keyword analysis */ }
 
     return null;
   }
