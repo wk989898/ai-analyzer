@@ -41,7 +41,7 @@ export class AnalyzerService {
     }
 
     if (dailySummary.conversationCount > 0) {
-      const profile = await this.tasteAnalyzer.analyze(dailySummary);
+      const profile = await this.tasteAnalyzer.analyze(dailySummary, conversations);
       if (profile) {
         this.tasteAnalyzer.saveVersion(profile);
         this.tasteAnalyzer.injectToSteering(profile);
