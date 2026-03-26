@@ -149,6 +149,22 @@ function renderSummaries(summaries) {
         ${(s.domains ?? []).map(d => `<span class="tag domain">${d}</span>`).join('')}
         ${(s.topics ?? []).slice(0, 5).map(t => `<span class="tag">${t}</span>`).join('')}
       </div>
+      ${(s.sessions ?? []).length ? `
+      <div class="sessions-table">
+        <table>
+          <thead><tr><th>Tool</th><th>Start</th><th>End</th><th>Tokens</th><th>Opening</th></tr></thead>
+          <tbody>
+            ${s.sessions.map(sess => `
+              <tr>
+                <td><span class="tag">${sess.tool}</span></td>
+                <td class="mono">${sess.start ? sess.start.replace('T',' ').slice(0,19) : '—'}</td>
+                <td class="mono">${sess.end ? sess.end.replace('T',' ').slice(0,19) : '—'}</td>
+                <td class="mono">${sess.tokens?.toLocaleString() ?? '—'}</td>
+                <td class="opening">${sess.opening ?? ''}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
     </div>`).join('');
 }
 

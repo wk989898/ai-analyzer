@@ -205,3 +205,11 @@ canvas { display: block; }
   .two-col, .stats-row { grid-template-columns: 1fr; }
   .taste-layout { grid-template-columns: 1fr; }
 }
+
+.sessions-table { margin-top: .75rem; overflow-x: auto; }
+.sessions-table table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+.sessions-table th { text-align: left; color: var(--text3); font-weight: 500; padding: .4rem .6rem; border-bottom: 1px solid var(--border); }
+.sessions-table td { padding: .4rem .6rem; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: top; }
+.sessions-table tr:last-child td { border-bottom: none; }
+.mono { font-family: var(--mono); font-size: .75rem; white-space: nowrap; }
+.opening { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text3); }

@@ -83,6 +83,16 @@ export class WebServer {
     const domains = parseList(content.match(/\*\*Domains\*\*: (.+)/)?.[1]);
     const count = parseInt(content.match(/\*\*Conversations\*\*: (\d+)/)?.[1] ?? '0');
     const brief = content.match(/## Summary\n+([\s\S]+?)(?:\n##|$)/)?.[1].trim() ?? '';
-    return { topics, keywords, domains, conversationCount: count, briefSummary: brief };
+    const sessions = this.parseSessionsTable(content);
+    return { topics, keywords, domains, conversationCount: count, briefSummary: brief, sessions };
+  }
+
+  private parseSessionsTable(content: string): object[] {
+    const section = content.match(/## Sessions\n([\s\S]+?)(?:\n##|$)/)?.[1] ?? '';
+    const rows = section.split('\n').filter(l => l.startsWith('|') && !l.includes('---') && !l.includes('Tool'));
+    return rows.map(row => {
+      const cols = row.split('|').map(c => c.trim()).filter(Boolean);
+      return { tool: cols[1], start: cols[2], end: cols[3], tokens: parseInt(cols[4]) || 0, opening: cols[5] };
+    }).filter(s => s.tool && s.tool !== '—');
   }
 }

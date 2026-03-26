@@ -1,15 +1,15 @@
 import fs from 'fs';
 import path from 'path';
-import { TokenSummary, DailySummary } from '../types';
+import { Conversation, TokenSummary, DailySummary } from '../types';
 import { ConfigManager } from '../config/ConfigManager';
 
 export class ReportGenerator {
   constructor(private config: ConfigManager) {}
 
-  generate(date: string, token: TokenSummary, summary: DailySummary): void {
+  generate(date: string, token: TokenSummary, summary: DailySummary, conversations: Conversation[] = []): void {
     const { outputDir } = this.config.get();
     fs.mkdirSync(outputDir, { recursive: true });
-    fs.writeFileSync(path.join(outputDir, `${date}.md`), this.buildDailyReport(date, token, summary));
+    fs.writeFileSync(path.join(outputDir, `${date}.md`), this.buildDailyReport(date, token, summary, conversations));
   }
 
   appendToSummary(date: string, token: TokenSummary, summary: DailySummary): void {
@@ -23,7 +23,6 @@ export class ReportGenerator {
     }
 
     const existing = fs.readFileSync(summaryPath, 'utf-8');
-    // Replace existing entry for same date or prepend
     const dateHeader = `## ${date}`;
     if (existing.includes(dateHeader)) {
       const replaced = existing.replace(new RegExp(`## ${date}[\\s\\S]+?(?=\n## |$)`), entry);
@@ -33,10 +32,18 @@ export class ReportGenerator {
     }
   }
 
-  private buildDailyReport(date: string, token: TokenSummary, summary: DailySummary): string {
+  private buildDailyReport(date: string, token: TokenSummary, summary: DailySummary, conversations: Conversation[]): string {
     const toolRows = Object.entries(token.byTool)
       .map(([tool, t]) => `| ${tool} | ${t.input.toLocaleString()} | ${t.output.toLocaleString()} |`)
       .join('\n');
+
+    const sessionRows = conversations.map((c, i) => {
+      const msgs = c.messages;
+      const start = msgs[0]?.timestamp ? new Date(msgs[0].timestamp).toISOString() : '';
+      const end = msgs[msgs.length - 1]?.timestamp ? new Date(msgs[msgs.length - 1].timestamp).toISOString() : '';
+      const firstMsg = msgs.find(m => m.role === 'user')?.content.slice(0, 80).replace(/\n/g, ' ') ?? '';
+      return `| ${i + 1} | ${c.tool} | ${start} | ${end} | ${c.tokenUsage.input + c.tokenUsage.output} | ${firstMsg}... |`;
+    }).join('\n');
 
     return `# AI Usage Report — ${date}
 
@@ -53,6 +60,12 @@ ${toolRows}
 **Topics**: ${summary.topics.join(', ') || 'N/A'}
 **Keywords**: ${summary.keywords.join(', ') || 'N/A'}
 **Domains**: ${summary.domains.join(', ') || 'N/A'}
+
+## Sessions
+
+| # | Tool | Start | End | Tokens | Opening Message |
+|---|------|-------|-----|--------|-----------------|
+${sessionRows || '| — | — | — | — | — | No sessions |'}
 
 ## Summary
 

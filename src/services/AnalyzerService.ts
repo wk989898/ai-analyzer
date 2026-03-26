@@ -49,7 +49,7 @@ export class AnalyzerService {
       }
     }
 
-    this.reportGenerator.generate(targetDate, tokenSummary, dailySummary);
+    this.reportGenerator.generate(targetDate, tokenSummary, dailySummary, conversations);
     this.reportGenerator.appendToSummary(targetDate, tokenSummary, dailySummary);
     console.log(`[AnalyzerService] Report generated for ${targetDate}`);
   }
