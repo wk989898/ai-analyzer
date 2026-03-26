@@ -10,17 +10,17 @@ export class TasteAnalyzer {
     const { outputDir, tasteDir } = this.config.get();
     const history = this.loadHistory(outputDir, 30);
 
-    if (history.length < 3) {
-      console.log('[TasteAnalyzer] Not enough history (need 3+ days), skipping taste update');
+    // Count current newSummary as one day too
+    const allSummaries = [...history, newSummary];
+    if (allSummaries.length < 3) {
+      console.log(`[TasteAnalyzer] Not enough history (${allSummaries.length}/3 days), skipping taste update`);
       return null;
     }
-
-    const allSummaries = [...history, newSummary];
     const n = allSummaries.length;
     const weighted = allSummaries.map((s, i) => ({ ...s, weight: (i + 1) / n }));
 
     const apiKey = this.config.getApiKey('openai') ?? this.config.getApiKey('kiro');
-    if (!apiKey) return null;
+    if (!apiKey) return this.fallbackProfile(allSummaries, n);
 
     try {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -114,6 +114,25 @@ Respond in JSON only.`,
       .filter(Boolean)
       .map(m => parseInt(m![1]));
     return versions.length > 0 ? Math.max(...versions) + 1 : 1;
+  }
+
+  private fallbackProfile(summaries: DailySummary[], n: number): TasteProfile {
+    const allKeywords = summaries.flatMap(s => s.keywords);
+    const allDomains = summaries.flatMap(s => s.domains);
+    const freq = (arr: string[]) => {
+      const map: Record<string, number> = {};
+      for (const w of arr) map[w] = (map[w] ?? 0) + 1;
+      return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([w]) => w);
+    };
+    const version = this.getNextVersion(this.config.get().tasteDir);
+    return {
+      version,
+      updatedAt: new Date().toISOString(),
+      techPreferences: freq(allKeywords).slice(0, 10),
+      communicationStyle: [],
+      workDomains: freq(allDomains).slice(0, 5),
+      otherInsights: [`Based on ${n} days of conversation history (keyword analysis)`],
+    };
   }
 
   private toMarkdown(profile: TasteProfile): string {
