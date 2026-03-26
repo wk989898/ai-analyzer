@@ -26,27 +26,28 @@ export class TasteAnalyzer {
 
     const prompt = `You are maintaining a developer's evolving taste profile used to steer AI agent responses.
 
-MERGING RULES (strictly follow):
-- Historical profile weight: 70% — preserve existing items unless clearly contradicted by new evidence
-- New conversations weight: 30% — add new observations, do NOT replace existing ones
-- For each field: keep all existing items, append new ones if discovered, only remove if directly contradicted
-- Max items per field enforced AFTER merging (drop least-relevant if over limit)
+MERGING RULES:
+- Analyze ALL conversation summaries below (full history, not just recent)
+- Items that appear repeatedly across many days should be weighted higher and kept
+- Items that appear only once or twice should be treated as weak signals
+- New observations from today's messages should be added only if they represent a genuine new pattern
+- Do NOT arbitrarily replace stable existing items with new ones
+- Each field: keep high-frequency items, add new patterns, drop one-off noise
 
-${prevProfile ? `EXISTING PROFILE (70% weight — preserve these):\n${JSON.stringify(prevProfile, null, 2)}\n\n` : ''}NEW EVIDENCE (30% weight — extract additions only):
-Conversation summaries (${allSummaries.length} days total):
-${allSummaries.slice(-7).map(s => `[${s.date}] keywords: ${s.keywords.slice(0, 5).join(',')}`).join('\n')}
+ALL conversation summaries (${allSummaries.length} days — use frequency across days as signal strength):
+${allSummaries.map(s => `[${s.date}] keywords: ${s.keywords.slice(0, 8).join(', ')}`).join('\n')}
 
-Recent user messages:
+${prevProfile ? `Current profile (reflects accumulated history — only evolve, don't reset):\n${JSON.stringify(prevProfile, null, 2)}\n\n` : ''}Today's user messages (new evidence to incorporate if it shows a new pattern):
 ${userMessages}
 
 Output ONLY valid JSON (max items per field in parentheses):
 {
-  "techPreferences": ["(max 5) merge existing + new tech/tools"],
-  "workDomains": ["(max 3) merge existing + new domains"],
-  "personality": ["(max 5) merge existing + new traits/habits/style"],
-  "responseGuidance": ["(max 5) merge existing + new AI response instructions"],
-  "strengths": ["(max 3) merge existing + new strengths"],
-  "weaknesses": ["(max 3) merge existing + new blind spots"]
+  "techPreferences": ["(max 5) technologies/tools that appear frequently across history"],
+  "workDomains": ["(max 3) domains that appear frequently across history"],
+  "personality": ["(max 5) stable traits/habits/style observed repeatedly"],
+  "responseGuidance": ["(max 5) AI response instructions based on stable patterns"],
+  "strengths": ["(max 3) strengths observed repeatedly"],
+  "weaknesses": ["(max 3) blind spots observed repeatedly"]
 }`;
 
     const result = this.callAI(prompt);
@@ -160,30 +161,31 @@ Output ONLY valid JSON (max items per field in parentheses):
     prev: TasteProfile | null,
     version: number,
   ): TasteProfile {
-    const words = conversations
-      .flatMap(c => c.messages.filter(m => m.role === 'user').map(m => m.content))
-      .join(' ')
-      .toLowerCase()
-      .match(/\b[a-z][a-z0-9_-]{2,}\b/g) ?? [];
-
-    const stopWords = new Set(['the','and','for','are','but','not','you','all','can','that','this','with','have','from','they','will','been','were','what','some','more','also','just','like','make','your','when','then','than','them','into','over','such','take','well','said','each','which','their','there','would','about','could','other']);
-    const freq = (arr: string[]) => {
+    const STOP = new Set(['the','and','for','are','but','not','you','all','can','that','this','with','have','from','they','will','been','were','what','some','more','also','just','like','make','your','when','then','than','them','into','over','such','take','well','said','each','which','their','there','would','about','could','other']);
+    const topByFreq = (arr: string[], limit: number) => {
       const map: Record<string, number> = {};
       for (const w of arr) map[w] = (map[w] ?? 0) + 1;
-      return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([w]) => w);
+      return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([w]) => w).slice(0, limit);
     };
 
-    const newKeywords = freq(words.filter(w => !stopWords.has(w))).slice(0, 15);
-    const newDomains = freq(summaries.flatMap(s => s.domains)).slice(0, 5);
-    // 70% history + 30% new: existing items first, new appended, capped at limit
-    const merge = (newItems: string[], prevItems: string[], limit: number) =>
-      [...new Set([...(prevItems ?? []), ...newItems])].slice(0, limit);
+    // Frequency across all history days — high freq = stable signal
+    const histKeywords = topByFreq(summaries.flatMap(s => s.keywords), 5);
+    const histDomains = topByFreq(summaries.flatMap(s => s.domains), 3);
+
+    // Today's conversation text — new signal
+    const todayWords = conversations
+      .flatMap(c => c.messages.filter(m => m.role === 'user').map(m => m.content))
+      .join(' ').toLowerCase().match(/\b[a-z][a-z0-9_-]{2,}\b/g) ?? [];
+    const todayTop = topByFreq(todayWords.filter(w => !STOP.has(w)), 10);
+
+    const mergeByFreq = (hist: string[], today: string[], limit: number) =>
+      [...new Set([...hist, ...today])].slice(0, limit);
 
     return {
       version,
       updatedAt: new Date().toISOString(),
-      techPreferences: merge(newKeywords, prev?.techPreferences ?? [], 5),
-      workDomains: merge(newDomains, prev?.workDomains ?? [], 3),
+      techPreferences: mergeByFreq(histKeywords, todayTop, 5),
+      workDomains: mergeByFreq(histDomains, [], 3),
       personality: prev?.personality ?? [],
       responseGuidance: prev?.responseGuidance ?? [],
       strengths: prev?.strengths ?? [],
