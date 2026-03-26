@@ -35,13 +35,16 @@ export class KiroCLIAdapter implements LogAdapter {
       for (const item of history) {
         const userPrompt: string = item.user?.content?.Prompt?.prompt ?? '';
         const userTs = item.user?.timestamp ? new Date(item.user.timestamp) : new Date(row.created_at);
+
+        // Skip internal ai-analyzer taste generation calls
+        if (userPrompt.startsWith('You are analyzing') || userPrompt.startsWith('You are maintaining')) continue;
+
         if (userPrompt) messages.push({ role: 'user', content: userPrompt, timestamp: userTs });
 
         const assistantContent: string = item.assistant?.Response?.content ?? '';
         if (assistantContent) messages.push({ role: 'assistant', content: assistantContent, timestamp: new Date(row.created_at) });
 
         const meta = item.request_metadata ?? {};
-        // Estimate tokens: 1 token ≈ 4 chars
         inputTokens += Math.round((meta.user_prompt_length ?? 0) / 4);
         outputTokens += Math.round((meta.response_size ?? 0) / 4);
       }
