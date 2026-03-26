@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="logo">
+      <span class="logo-icon">⬡</span>
+      <span class="logo-text">AI Analyzer</span>
+    </div>
+    <nav class="nav">
+      <a class="nav-item active" data-page="dashboard" data-testid="nav-dashboard">
+        <span class="nav-icon">◈</span> Dashboard
+      </a>
+      <a class="nav-item" data-page="summaries" data-testid="nav-summaries">
+        <span class="nav-icon">◉</span> Summaries
+      </a>
+      <a class="nav-item" data-page="taste" data-testid="nav-taste">
+        <span class="nav-icon">◇</span> Taste Profile
+      </a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <!-- Dashboard -->
+    <section id="page-dashboard" class="page active">
+      <header class="page-header">
+        <h1>Dashboard</h1>
+        <p class="subtitle">Token usage across all AI agents</p>
+      </header>
+
+      <div id="error-banner" class="error-banner hidden" data-testid="error-banner"></div>
+
+      <div class="stats-row" id="stats-row"></div>
+
+      <div class="card full-width">
+        <div class="card-header">
+          <h2>Token Trend</h2>
+          <span class="card-hint">Last 30 days</span>
+        </div>
+        <canvas id="token-trend-chart" data-testid="token-trend-chart" height="80"></canvas>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><h2>Tool Share</h2><span class="card-hint">All time</span></div>
+          <canvas id="tool-pie-chart" data-testid="tool-pie-chart" height="180"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Daily Conversations</h2><span class="card-hint">Last 7 days</span></div>
+          <canvas id="conversation-bar-chart" data-testid="conversation-bar-chart" height="180"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Summaries -->
+    <section id="page-summaries" class="page hidden">
+      <header class="page-header">
+        <h1>Daily Summaries</h1>
+        <p class="subtitle">Conversation highlights by day</p>
+      </header>
+      <div id="summaries-list" data-testid="summaries-list"></div>
+    </section>
+
+    <!-- Taste -->
+    <section id="page-taste" class="page hidden">
+      <header class="page-header">
+        <h1>Taste Profile</h1>
+        <p class="subtitle">Your evolving AI interaction style</p>
+      </header>
+      <div class="taste-layout">
+        <div class="taste-sidebar">
+          <p class="taste-sidebar-label">Versions</p>
+          <div id="taste-history" data-testid="taste-history-list"></div>
+        </div>
+        <div class="card taste-content">
+          <div id="taste-viewer" data-testid="taste-viewer">
+            <p class="empty-state">No taste profile yet. Run <code>ai-analyzer run</code> for 3+ days to generate one.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
