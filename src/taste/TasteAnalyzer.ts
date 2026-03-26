@@ -24,23 +24,29 @@ export class TasteAnalyzer {
       .slice(-30)
       .join('\n---\n');
 
-    const prompt = `You are analyzing a developer's AI agent conversation history to build a detailed taste profile.
-The profile will be injected into AI agents as a steering document so they can respond in a style that matches this user.
+    const prompt = `You are maintaining a developer's evolving taste profile used to steer AI agent responses.
 
-${prevProfile ? `Previous profile (merge and evolve this):\n${JSON.stringify(prevProfile, null, 2)}\n\n` : ''}Recent conversation summaries (${allSummaries.length} days):
-${allSummaries.map(s => `[${s.date}] topics: ${s.topics.join(',')} keywords: ${s.keywords.join(',')}`).join('\n')}
+MERGING RULES (strictly follow):
+- Historical profile weight: 70% — preserve existing items unless clearly contradicted by new evidence
+- New conversations weight: 30% — add new observations, do NOT replace existing ones
+- For each field: keep all existing items, append new ones if discovered, only remove if directly contradicted
+- Max items per field enforced AFTER merging (drop least-relevant if over limit)
 
-Recent user messages (analyze tone, style, habits):
+${prevProfile ? `EXISTING PROFILE (70% weight — preserve these):\n${JSON.stringify(prevProfile, null, 2)}\n\n` : ''}NEW EVIDENCE (30% weight — extract additions only):
+Conversation summaries (${allSummaries.length} days total):
+${allSummaries.slice(-7).map(s => `[${s.date}] keywords: ${s.keywords.slice(0, 5).join(',')}`).join('\n')}
+
+Recent user messages:
 ${userMessages}
 
-Generate a concise taste profile. Keep each array to max 5 items. Output ONLY valid JSON:
+Output ONLY valid JSON (max items per field in parentheses):
 {
-  "techPreferences": ["top technologies, languages, tools (max 5)"],
-  "workDomains": ["primary work domains (max 3)"],
-  "personality": ["key personality traits, communication style, and habits merged into one list (max 5)"],
-  "responseGuidance": ["concrete instructions for AI on HOW to respond to this user (max 5)"],
-  "strengths": ["user's key strengths (max 3)"],
-  "weaknesses": ["user's blind spots or weaknesses (max 3)"]
+  "techPreferences": ["(max 5) merge existing + new tech/tools"],
+  "workDomains": ["(max 3) merge existing + new domains"],
+  "personality": ["(max 5) merge existing + new traits/habits/style"],
+  "responseGuidance": ["(max 5) merge existing + new AI response instructions"],
+  "strengths": ["(max 3) merge existing + new strengths"],
+  "weaknesses": ["(max 3) merge existing + new blind spots"]
 }`;
 
     const result = this.callAI(prompt);
@@ -169,7 +175,9 @@ Generate a concise taste profile. Keep each array to max 5 items. Output ONLY va
 
     const newKeywords = freq(words.filter(w => !stopWords.has(w))).slice(0, 15);
     const newDomains = freq(summaries.flatMap(s => s.domains)).slice(0, 5);
-    const merge = (a: string[], b: string[], n: number) => [...new Set([...a, ...b])].slice(0, n);
+    // 70% history + 30% new: existing items first, new appended, capped at limit
+    const merge = (newItems: string[], prevItems: string[], limit: number) =>
+      [...new Set([...(prevItems ?? []), ...newItems])].slice(0, limit);
 
     return {
       version,
