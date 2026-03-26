@@ -39,6 +39,8 @@ Generate an evolved taste profile. Output ONLY valid JSON with these fields:
   "workDomains": ["primary work domains"],
   "personalityTraits": ["inferred personality traits and habits from conversation patterns, e.g. 'prefers concise answers', 'pastes raw logs without filtering', 'iterative problem-solver', 'direct and low-ceremony'"],
   "responseGuidance": ["concrete instructions for AI agents on HOW to respond to this user, e.g. 'respond in Chinese unless user writes in English', 'skip pleasantries and get to the point', 'show commands directly without lengthy explanation', 'use bullet points over paragraphs'],
+  "strengths": ["user's strengths and highlights inferred from conversations, e.g. 'methodical debugger', 'strong intuition about root causes'"],
+  "weaknesses": ["user's weaknesses or blind spots, e.g. 'sometimes jumps to conclusions', 'may overlook documentation'"],
   "otherInsights": ["other notable patterns or interests"]
 }`;
 
@@ -116,6 +118,8 @@ Generate an evolved taste profile. Output ONLY valid JSON with these fields:
         workDomains: parseSection('Work Domains'),
         personalityTraits: parseSection('Personality & Habits'),
         responseGuidance: parseSection('How to Respond to This User'),
+        strengths: parseSection('Strengths & Highlights'),
+        weaknesses: parseSection('Weaknesses & Blind Spots'),
         otherInsights: parseSection('Other Insights'),
       };
     } catch { return null; }
@@ -152,6 +156,8 @@ Generate an evolved taste profile. Output ONLY valid JSON with these fields:
       workDomains: merge(newDomains, prev?.workDomains ?? [], 5),
       personalityTraits: prev?.personalityTraits ?? [],
       responseGuidance: prev?.responseGuidance ?? [],
+      strengths: prev?.strengths ?? [],
+      weaknesses: prev?.weaknesses ?? [],
       otherInsights: [`Based on ${summaries.length} days of conversation history (keyword analysis)`],
     };
   }
@@ -211,6 +217,12 @@ ${(profile.personalityTraits ?? []).map(p => `- ${p}`).join('\n')}
 
 ## How to Respond to This User
 ${(profile.responseGuidance ?? []).map(r => `- ${r}`).join('\n')}
+
+## Strengths & Highlights
+${(profile.strengths ?? []).map(s => `- ${s}`).join('\n')}
+
+## Weaknesses & Blind Spots
+${(profile.weaknesses ?? []).map(w => `- ${w}`).join('\n')}
 
 ## Other Insights
 ${profile.otherInsights.map(i => `- ${i}`).join('\n')}

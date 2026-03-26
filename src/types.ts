@@ -47,6 +47,8 @@ export interface TasteProfile {
   workDomains: string[];
   personalityTraits: string[];
   responseGuidance: string[];
+  strengths: string[];
+  weaknesses: string[];
   otherInsights: string[];
 }
 
