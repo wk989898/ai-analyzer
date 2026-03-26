@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { Conversation, DailySummary, TasteProfile } from '../types';
 import { ConfigManager } from '../config/ConfigManager';
 
@@ -9,57 +10,76 @@ export class TasteAnalyzer {
   async analyze(newSummary: DailySummary, conversations: Conversation[]): Promise<TasteProfile | null> {
     const { outputDir, tasteDir } = this.config.get();
     const history = this.loadHistory(outputDir, 30);
-
-    // Include current day's summary in the count
     const allSummaries = [...history, newSummary];
+
     if (allSummaries.length < 3) {
       console.log(`[TasteAnalyzer] Not enough history (${allSummaries.length}/3 days), skipping taste update`);
       return null;
     }
 
-    const n = allSummaries.length;
     const prevProfile = this.loadLatestProfile(tasteDir);
-    const apiKey = this.config.getApiKey('openai') ?? this.config.getApiKey('kiro');
+    const userMessages = conversations
+      .flatMap(c => c.messages.filter(m => m.role === 'user').map(m => m.content.slice(0, 300)))
+      .slice(-30)
+      .join('\n---\n');
 
-    if (!apiKey) return this.fallbackProfile(allSummaries, conversations, prevProfile, n);
+    const prompt = `You are analyzing a developer's AI agent conversation history to build a taste profile.
 
-    try {
-      const weighted = allSummaries.map((s, i) => ({ ...s, weight: (i + 1) / n }));
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          response_format: { type: 'json_object' },
-          messages: [{
-            role: 'user',
-            content: `You are building a user taste profile that evolves over time.
+${prevProfile ? `Previous profile (merge and evolve this):\n${JSON.stringify(prevProfile, null, 2)}\n\n` : ''}Recent conversation summaries (${allSummaries.length} days):
+${allSummaries.map(s => `[${s.date}] topics: ${s.topics.join(',')} keywords: ${s.keywords.join(',')}`).join('\n')}
 
-${prevProfile ? `Previous profile (v${prevProfile.version}):\n${JSON.stringify(prevProfile)}\n\n` : ''}New conversation summaries (weight 1.0 = most recent, lower = older):
-${JSON.stringify(weighted)}
+Recent user messages:
+${userMessages}
 
-Recent conversation excerpts (last 20 user messages):
-${conversations.flatMap(c => c.messages.filter(m => m.role === 'user').map(m => m.content.slice(0, 200))).slice(-20).join('\n---\n')}
+Based on the above, generate an evolved taste profile. Output ONLY valid JSON with these fields:
+{
+  "techPreferences": ["list of technologies, languages, tools the user works with"],
+  "communicationStyle": ["how they communicate: language (Chinese/English), verbosity, directness, etc"],
+  "workDomains": ["primary work domains"],
+  "otherInsights": ["other notable patterns, interests, or preferences"]
+}`;
 
-Merge the previous profile with new evidence. Extract:
-- techPreferences: technologies/tools/languages the user works with (array, max 15)
-- communicationStyle: how the user communicates (language preference, verbosity, style) (array, max 10)
-- workDomains: primary work domains (array, max 5)
-- otherInsights: other notable patterns inferred from conversations (array, max 5)
+    const result = this.callAI(prompt);
+    const version = this.getNextVersion(tasteDir);
 
-Respond in JSON only.`,
-          }],
-        }),
-      });
-
-      const data: any = await res.json();
-      const parsed = JSON.parse(data.choices[0].message.content);
-      const version = this.getNextVersion(tasteDir);
-      return { version, updatedAt: new Date().toISOString(), ...parsed };
-    } catch (e) {
-      console.warn('[TasteAnalyzer] LLM call failed, using fallback:', e);
-      return this.fallbackProfile(allSummaries, conversations, prevProfile, n);
+    if (result) {
+      try {
+        const parsed = JSON.parse(result);
+        return { version, updatedAt: new Date().toISOString(), ...parsed };
+      } catch {
+        console.warn('[TasteAnalyzer] Failed to parse AI response, using fallback');
+      }
     }
+
+    return this.fallbackProfile(allSummaries, conversations, prevProfile, version);
+  }
+
+  private callAI(prompt: string): string | null {
+    // Try kiro-cli first
+    try {
+      const out = execSync(`kiro-cli chat ${JSON.stringify(prompt)}`, {
+        timeout: 60000,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      // Strip ANSI codes and extract JSON block
+      const clean = out.replace(/\x1b\[[0-9;]*[mGKHFJA-Z]/g, '').replace(/\r/g, '');
+      const match = clean.match(/\{[\s\S]+\}/);
+      if (match) return match[0];
+    } catch { /* try next */ }
+
+    // Try codex
+    try {
+      const out = execSync(`codex --quiet ${JSON.stringify(prompt)}`, {
+        timeout: 60000,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const match = out.match(/\{[\s\S]+\}/);
+      if (match) return match[0];
+    } catch { /* fallback */ }
+
+    return null;
   }
 
   saveVersion(profile: TasteProfile): void {
@@ -76,20 +96,18 @@ Respond in JSON only.`,
     fs.writeFileSync(path.join(steeringDir, 'taste.md'), this.toMarkdown(profile));
   }
 
-  // Load previous taste profile to merge with new data
   private loadLatestProfile(tasteDir: string): TasteProfile | null {
     const latest = path.join(tasteDir, 'taste.md');
     if (!fs.existsSync(latest)) return null;
     try {
       const content = fs.readFileSync(latest, 'utf-8');
       const versionMatch = content.match(/version: (\d+)/);
-      const updatedMatch = content.match(/updated: ([^\s]+)/);
       const parseSection = (header: string) =>
-        [...content.matchAll(new RegExp(`## ${header}\\n([\\s\\S]+?)(?=\\n##|$)`, 'g'))]
-          .flatMap(m => m[1].split('\n').filter(l => l.startsWith('- ')).map(l => l.slice(2)));
+        (content.match(new RegExp(`## ${header}\\n([\\s\\S]+?)(?=\\n##|$)`)) ?? [])[1]
+          ?.split('\n').filter(l => l.startsWith('- ')).map(l => l.slice(2)) ?? [];
       return {
         version: versionMatch ? parseInt(versionMatch[1]) : 1,
-        updatedAt: updatedMatch?.[1] ?? '',
+        updatedAt: '',
         techPreferences: parseSection('Tech Preferences'),
         communicationStyle: parseSection('Communication Style'),
         workDomains: parseSection('Work Domains'),
@@ -102,39 +120,32 @@ Respond in JSON only.`,
     summaries: DailySummary[],
     conversations: Conversation[],
     prev: TasteProfile | null,
-    n: number,
+    version: number,
   ): TasteProfile {
-    // Extract keywords from actual conversation text
-    const userMessages = conversations
-      .flatMap(c => c.messages.filter(m => m.role === 'user').map(m => m.content));
-    const allText = userMessages.join(' ');
-    const words = allText.toLowerCase().match(/\b[a-z][a-z0-9_-]{2,}\b/g) ?? [];
+    const words = conversations
+      .flatMap(c => c.messages.filter(m => m.role === 'user').map(m => m.content))
+      .join(' ')
+      .toLowerCase()
+      .match(/\b[a-z][a-z0-9_-]{2,}\b/g) ?? [];
 
-    // Filter out common stop words
-    const stopWords = new Set(['the','and','for','are','but','not','you','all','can','had','her','was','one','our','out','day','get','has','him','his','how','its','may','new','now','old','see','two','way','who','did','let','put','say','she','too','use','that','this','with','have','from','they','will','been','were','said','each','which','their','there','would','about','could','other','into','than','then','when','what','some','more','also','just','like','make','over','such','take','than','them','well','your']);
-    const techWords = words.filter(w => !stopWords.has(w) && w.length > 2);
-
+    const stopWords = new Set(['the','and','for','are','but','not','you','all','can','that','this','with','have','from','they','will','been','were','what','some','more','also','just','like','make','your','when','then','than','them','into','over','such','take','well','said','each','which','their','there','would','about','could','other']);
     const freq = (arr: string[]) => {
       const map: Record<string, number> = {};
       for (const w of arr) map[w] = (map[w] ?? 0) + 1;
       return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([w]) => w);
     };
 
-    const newKeywords = freq(techWords).slice(0, 15);
+    const newKeywords = freq(words.filter(w => !stopWords.has(w))).slice(0, 15);
     const newDomains = freq(summaries.flatMap(s => s.domains)).slice(0, 5);
+    const merge = (a: string[], b: string[], n: number) => [...new Set([...a, ...b])].slice(0, n);
 
-    // Merge with previous profile: combine and deduplicate, keeping new items first
-    const merge = (newItems: string[], prevItems: string[], limit: number) =>
-      [...new Set([...newItems, ...(prevItems ?? [])])].slice(0, limit);
-
-    const version = this.getNextVersion(this.config.get().tasteDir);
     return {
       version,
       updatedAt: new Date().toISOString(),
       techPreferences: merge(newKeywords, prev?.techPreferences ?? [], 15),
       communicationStyle: prev?.communicationStyle ?? [],
       workDomains: merge(newDomains, prev?.workDomains ?? [], 5),
-      otherInsights: [`Based on ${n} days of conversation history (keyword analysis)`],
+      otherInsights: [`Based on ${summaries.length} days of conversation history (keyword analysis)`],
     };
   }
 
